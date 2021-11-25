@@ -249,7 +249,7 @@ class BedJet(ClimateEntity):
             self._preset_mode = "dry"
         if value[14] == 0x43:
             self._hvac_mode = HVAC_MODE_HEAT
-            self._preset_mode = "ext ht"
+            self._preset_mode = "ext_ht"
 
         self._last_seen = datetime.datetime.now()
 

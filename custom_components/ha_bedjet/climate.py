@@ -50,6 +50,7 @@ except ImportError:
 
 BEDJET_COMMAND_UUID = '00002004-bed0-0080-aa55-4265644a6574'
 BEDJET_SUBSCRIPTION_UUID = '00002000-bed0-0080-aa55-4265644a6574'
+MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(seconds=120)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_NAME): cv.string,
@@ -224,6 +225,18 @@ class BedJet(ClimateEntity):
                 self.connect()
 
         return False
+        
+    def unsubscribe(self):
+        for j in range(0, 5):
+            try:
+                self._device.unsubscribe(BEDJET_SUBSCRIPTION_UUID, wait_for_response=True)
+                return True
+            except pygatt.exceptions.NotificationTimeout:
+                print('Trying again')
+            except pygatt.exceptions.NotConnectedError:
+                self.connect()
+
+        return False
 
     # parses the notifications from the BedJet
     def handle_data(self, handle, value):
@@ -320,3 +333,8 @@ class BedJet(ClimateEntity):
         if preset_mode == 'ext_ht':
             m = mode.ext_ht
         self.set_mode(m)
+    
+    @Throttle(MIN_TIME_BETWEEN_UPDATES)
+    def update(self):
+        self.unsubscribe()
+        self.subscribe()

@@ -38,11 +38,11 @@ Configuration variables:
 
 ## Finding BedJet MAC Address
 
-I found mine using [Bluetooth LE Explorer](https://www.microsoft.com/en-us/p/bluetooth-le-explorer/9n0ztkf1qd98?activetab=pivot:overviewtab)
+I found mine using [Bluetooth LE Explorer](https://www.microsoft.com/en-us/p/bluetooth-le-explorer/9n0ztkf1qd98?activetab=pivot:overviewtab). The BedJet will be the device named BEDJET_V3.
 
 ## Tips
 
-The BedJet can only maintain one connection at a time; when you install this component, you will not be able to use your remote or the BedJet app to control the device.
+~The BedJet can only maintain one connection at a time; when you install this component, you will not be able to use your remote or the BedJet app to control the device.~ It seems like this isn't strictly true. I've had success using both this integration and the remote at the same time.
 
 ## Reporting an Issue
 

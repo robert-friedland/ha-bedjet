@@ -299,11 +299,11 @@ class BedJet(ClimateEntity):
         self.send_command(BEDJET_COMMAND_UUID, [0x03,temp_byte])
 
     def set_hvac_mode(self, hvac_mode):
-        self.set_mode(BEDJET_COMMANDS(hvac_mode))
+        self.set_mode(BEDJET_COMMANDS[hvac_mode])
         self.set_time(480)
         
     def set_preset_mode(self, preset_mode):
-        self.set_mode(BEDJET_COMMANDS(preset_mode))
+        self.set_mode(BEDJET_COMMANDS[preset_mode])
     
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):

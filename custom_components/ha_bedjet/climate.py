@@ -281,16 +281,22 @@ class BedJet(ClimateEntity):
         self.send_command(BEDJET_COMMAND_UUID, [0x02, minutes // 60, minutes % 60])
 
     def set_fan_mode(self, fan_mode):
-        if fan_mode == 'FAN_MIN':
+        if fan_mode.isnumeric():
+            fan_pct = int(fan_pct)
+        elif fan_mode == 'FAN_MIN':
             fan_pct = 10
-        if fan_mode == 'FAN_LOW':
+        elif fan_mode == 'FAN_LOW':
             fan_pct = 25
-        if fan_mode == 'FAN_MEDIUM':
+        elif fan_mode == 'FAN_MEDIUM':
             fan_pct = 50
-        if fan_mode == 'FAN_HIGH':
+        elif fan_mode == 'FAN_HIGH':
             fan_pct = 75
-        if fan_mode == 'FAN_MAX':
+        elif fan_mode == 'FAN_MAX':
             fan_pct = 100
+        
+        if not (fan_pct >= 0 and fan_pct <= 100):
+            return
+        
         self.send_command(BEDJET_COMMAND_UUID, [0x07,round(fan_pct/5)-1])
 
     def set_temperature(self, **kwargs):

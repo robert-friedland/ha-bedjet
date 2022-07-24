@@ -4,7 +4,7 @@
     "documentation": "https://github.com/robert-friedland/ha-bedjet",
     "dependencies": [],
     "codeowners": ["@robert-friedland"],
-    "version": "0.0.1",
+    "version": "0.0.2",
     "requirements": [
         "pygatt==4.0.5"
     ]

@@ -52,6 +52,22 @@ BEDJET_COMMAND_UUID = '00002004-bed0-0080-aa55-4265644a6574'
 BEDJET_SUBSCRIPTION_UUID = '00002000-bed0-0080-aa55-4265644a6574'
 MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(seconds=120)
 
+BEDJET_COMMANDS = {
+    "off": 0x01,
+    "cool": 0x02,
+    "heat": 0x03,
+    "turbo": 0x04,
+    "dry": 0x05,
+    "ext_ht": 0x06,
+    "fan_up": 0x10,
+    "fan_down": 0x11,
+    "temp_up": 0x12,
+    "temp_down": 0x13,
+    "m1": 0x20,
+    "m2": 0x21,
+    "m3": 0x22
+}
+
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_NAME): cv.string,
     vol.Required(CONF_MAC): cv.string
@@ -67,26 +83,6 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     add_entities(
         [BedJet(name, mac, ADAPTER)]
     )
-
-
-class mode:
-    off = 0x01
-    cool = 0x02
-    heat = 0x03
-    turbo = 0x04
-    dry = 0x05
-    ext_ht = 0x06
-    
-class control:
-    fan_up = 0x10
-    fan_down = 0x11
-    temp_up = 0x12
-    temp_down = 0x13
-    
-class preset:
-    m1 = 0x20
-    m2 = 0x21
-    m3 = 0x22
 
 class BedJet(ClimateEntity):
     def __init__(self, name, mac, adapter):
@@ -166,7 +162,7 @@ class BedJet(ClimateEntity):
         
     @property
     def fan_modes(self):
-        return ['FAN_LOW', 'FAN_MEDIUM', 'FAN_HIGH', 'FAN_MAX']
+        return ['FAN_MIN', 'FAN_LOW', 'FAN_MEDIUM', 'FAN_HIGH', 'FAN_MAX']
         
     @property
     def min_temp(self):
@@ -178,6 +174,8 @@ class BedJet(ClimateEntity):
     
     @property
     def fan_mode(self):
+        if self._fan_pct <= 10:
+            return 'FAN_MIN'
         if self._fan_pct <= 25:
             return 'FAN_LOW'
         if self._fan_pct <= 50:
@@ -283,14 +281,22 @@ class BedJet(ClimateEntity):
         self.send_command(BEDJET_COMMAND_UUID, [0x02, minutes // 60, minutes % 60])
 
     def set_fan_mode(self, fan_mode):
-        if fan_mode == 'FAN_LOW':
+        if str(fan_mode).isnumeric():
+            fan_pct = int(fan_mode)
+        elif fan_mode == 'FAN_MIN':
+            fan_pct = 10
+        elif fan_mode == 'FAN_LOW':
             fan_pct = 25
-        if fan_mode == 'FAN_MEDIUM':
+        elif fan_mode == 'FAN_MEDIUM':
             fan_pct = 50
-        if fan_mode == 'FAN_HIGH':
+        elif fan_mode == 'FAN_HIGH':
             fan_pct = 75
-        if fan_mode == 'FAN_MAX':
+        elif fan_mode == 'FAN_MAX':
             fan_pct = 100
+        
+        if not (fan_pct >= 0 and fan_pct <= 100):
+            return
+        
         self.send_command(BEDJET_COMMAND_UUID, [0x07,round(fan_pct/5)-1])
 
     def set_temperature(self, **kwargs):
@@ -299,40 +305,11 @@ class BedJet(ClimateEntity):
         self.send_command(BEDJET_COMMAND_UUID, [0x03,temp_byte])
 
     def set_hvac_mode(self, hvac_mode):
-        if hvac_mode == 'off':
-            m = mode.off
-        if hvac_mode == 'cool':
-            m = mode.cool
-        if hvac_mode == 'heat':
-            m = mode.heat
-        if hvac_mode == 'turbo':
-            m = mode.turbo
-        if hvac_mode == 'dry':
-            m = mode.dry
-        if hvac_mode == 'ext_ht':
-            m = mode.ext_ht
-        self.set_mode(m)
+        self.set_mode(BEDJET_COMMANDS[hvac_mode])
+        self.set_time(600)
         
     def set_preset_mode(self, preset_mode):
-        if preset_mode == 'm1':
-            m = preset.m1
-        if preset_mode == 'm2':
-            m = preset.m2
-        if preset_mode == 'm3':
-            m = preset.m3
-        if preset_mode == 'off':
-            m = mode.off
-        if preset_mode == 'cool':
-            m = mode.cool
-        if preset_mode == 'heat':
-            m = mode.heat
-        if preset_mode == 'turbo':
-            m = mode.turbo
-        if preset_mode == 'dry':
-            m = mode.dry
-        if preset_mode == 'ext_ht':
-            m = mode.ext_ht
-        self.set_mode(m)
+        self.set_mode(BEDJET_COMMANDS[preset_mode])
     
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):

@@ -300,7 +300,7 @@ class BedJet(ClimateEntity):
 
     def set_hvac_mode(self, hvac_mode):
         self.set_mode(BEDJET_COMMANDS[hvac_mode])
-        self.set_time(480)
+        self.set_time(600)
         
     def set_preset_mode(self, preset_mode):
         self.set_mode(BEDJET_COMMANDS[preset_mode])

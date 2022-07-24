@@ -282,7 +282,7 @@ class BedJet(ClimateEntity):
 
     def set_fan_mode(self, fan_mode):
         if str(fan_mode).isnumeric():
-            fan_pct = int(fan_pct)
+            fan_pct = int(fan_mode)
         elif fan_mode == 'FAN_MIN':
             fan_pct = 10
         elif fan_mode == 'FAN_LOW':

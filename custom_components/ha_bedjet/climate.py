@@ -174,13 +174,14 @@ class BedJet(ClimateEntity):
     
     @property
     def fan_mode(self):
-        if self._fan_pct <= 10:
+        fan_pct = self._fan_pct or 0
+        if fan_pct <= 10:
             return 'FAN_MIN'
-        if self._fan_pct <= 25:
+        if fan_pct <= 25:
             return 'FAN_LOW'
-        if self._fan_pct <= 50:
+        if fan_pct <= 50:
             return 'FAN_MEDIUM'
-        if self._fan_pct <= 75:
+        if fan_pct <= 75:
             return 'FAN_HIGH'
         return 'FAN_MAX'
 

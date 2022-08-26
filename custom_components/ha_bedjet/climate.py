@@ -2,7 +2,8 @@ import datetime
 from datetime import timedelta
 import logging
 
-import pygatt
+import asyncio
+from bleak import BleakScanner, BleakClient
 from binascii import hexlify
 import time
 import math
@@ -19,7 +20,7 @@ import homeassistant.helpers.config_validation as cv
 _LOGGER = logging.getLogger(__name__)
 
 REQUIREMENTS = [
-    'pygatt==4.0.5'
+     "bleak==0.15.1"
 ]
 
 from homeassistant.components.climate.const import (
@@ -52,6 +53,12 @@ BEDJET_COMMAND_UUID = '00002004-bed0-0080-aa55-4265644a6574'
 BEDJET_SUBSCRIPTION_UUID = '00002000-bed0-0080-aa55-4265644a6574'
 MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(seconds=120)
 
+async def main():
+    devices = await BleakScanner.discover()
+    for d in devices:
+        if (d.name == 'BEDJET_V3'):
+            print(d.address)
+
 BEDJET_COMMANDS = {
     "off": 0x01,
     "cool": 0x02,
@@ -73,19 +80,16 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_MAC): cv.string
 })
 
-ADAPTER = pygatt.backends.GATTToolBackend()
-ADAPTER.start(reset_on_start=False)
-
 def setup_platform(hass, config, add_entities, discovery_info=None):
     name = config.get(CONF_NAME)
     mac = config.get(CONF_MAC)
 
     add_entities(
-        [BedJet(name, mac, ADAPTER)]
+        [BedJet(name, mac)]
     )
 
 class BedJet(ClimateEntity):
-    def __init__(self, name, mac, adapter):
+    def __init__(self, name, mac):
         self._name = name
         self._mac = mac
 
@@ -99,14 +103,10 @@ class BedJet(ClimateEntity):
         self._timestring = None
         self._fan_pct = None
 
-        self._adapter = adapter
         self._device = None
 
         if not self.connect():
             raise Exception(f'Could not establish connection to {self._name}.')
-        
-        if not self.subscribe():
-            raise Exception(f'Could not subscribe to {self._name}.')
 
     @property
     def name(self):
@@ -191,10 +191,11 @@ class BedJet(ClimateEntity):
         max_tries = 10
         for i in range(0, max_tries):
             try:
-                self._device = self._adapter.connect(self._mac)
-                self._device.resubscribe_all()
+                self._device = BleakClient(self._mac)
+                asyncio.run(self._device.connect())
+                self.subscribe()
                 return True
-            except pygatt.exceptions.NotConnectedError:
+            except:
                 print(f'Failed to connect to {self._mac} on try {str(i+1)} of {str(max_tries)}.')
         
         return False
@@ -203,12 +204,12 @@ class BedJet(ClimateEntity):
     def send_command(self, addr, cmd):
         for i in range(0, 10):
             try:
-                self._device.char_write(addr, cmd)
+                asyncio.run(self._device.write_gatt_char(addr, cmd))
                 return True
-            except pygatt.exceptions.NotificationTimeout:
+            except:
                 print('Trying again')
-            except pygatt.exceptions.NotConnectedError:
-                self.connect()
+            # except pygatt.exceptions.NotConnectedError:
+            #     self.connect()
 
         return False
 
@@ -216,24 +217,24 @@ class BedJet(ClimateEntity):
     def subscribe(self):
         for j in range(0, 5):
             try:
-                self._device.subscribe(BEDJET_SUBSCRIPTION_UUID, callback=self.handle_data)
+                asyncio.run(self._device.start_notify(BEDJET_SUBSCRIPTION_UUID, callback=self.handle_data))
                 return True
-            except pygatt.exceptions.NotificationTimeout:
+            except:
                 print('Trying again')
-            except pygatt.exceptions.NotConnectedError:
-                self.connect()
+            # except pygatt.exceptions.NotConnectedError:
+            #     self.connect()
 
         return False
         
     def unsubscribe(self):
         for j in range(0, 5):
             try:
-                self._device.unsubscribe(BEDJET_SUBSCRIPTION_UUID, wait_for_response=True)
+                asyncio.run(self._device.stop_notify(BEDJET_SUBSCRIPTION_UUID, wait_for_response=True))
                 return True
-            except pygatt.exceptions.NotificationTimeout:
+            except:
                 print('Trying again')
-            except pygatt.exceptions.NotConnectedError:
-                self.connect()
+            # except pygatt.exceptions.NotConnectedError:
+            #     self.connect()
 
         return False
 
@@ -267,19 +268,19 @@ class BedJet(ClimateEntity):
 
     # sets the BedJet mode. the Climate entity treats hvac and preset modes differently, but BedJet does not, so both hvac and preset sets call this function
     def set_mode(self, mode):
-        self.send_command(BEDJET_COMMAND_UUID, [0x01,mode])
+        asyncio.run(self.write_gatt_char(BEDJET_COMMAND_UUID, [0x01,mode]))
         
     # unused in Climate entity but may be useful later
     def press_control(self, control):
-        self.send_command(BEDJET_COMMAND_UUID, [0x01,control])
+        asyncio.run(self.write_gatt_char(BEDJET_COMMAND_UUID, [0x01,control]))
     
     # unused in Climate entity but may be useful later
     def press_preset(self, preset):
-        self.send_command(BEDJET_COMMAND_UUID, [0x01,preset])
+        asyncio.run(self.write_gatt_char(BEDJET_COMMAND_UUID, [0x01,preset]))
 
     # unused in Climate entity but may be useful later    
     def set_time(self, minutes):
-        self.send_command(BEDJET_COMMAND_UUID, [0x02, minutes // 60, minutes % 60])
+        asyncio.run(self.write_gatt_char(BEDJET_COMMAND_UUID, [0x02, minutes // 60, minutes % 60]))
 
     def set_fan_mode(self, fan_mode):
         if str(fan_mode).isnumeric():
@@ -298,12 +299,12 @@ class BedJet(ClimateEntity):
         if not (fan_pct >= 0 and fan_pct <= 100):
             return
         
-        self.send_command(BEDJET_COMMAND_UUID, [0x07,round(fan_pct/5)-1])
+        asyncio.run(self.write_gatt_char(BEDJET_COMMAND_UUID, [0x07,round(fan_pct/5)-1]))
 
     def set_temperature(self, **kwargs):
         temp = int(kwargs.get(ATTR_TEMPERATURE))
         temp_byte = (int((temp - 60) / 9) + (temp - 66))  + 0x26
-        self.send_command(BEDJET_COMMAND_UUID, [0x03,temp_byte])
+        asyncio.run(self.write_gatt_char(BEDJET_COMMAND_UUID, [0x03,temp_byte]))
 
     def set_hvac_mode(self, hvac_mode):
         self.set_mode(BEDJET_COMMANDS[hvac_mode])

@@ -101,31 +101,37 @@ class FanMode(Enum):
 
 
 class HVACMode(Enum):
-    OFF: HVAC_MODE_OFF
-    COOL = HVAC_MODE_COOL
-    HEAT = HVAC_MODE_HEAT
-    DRY = HVAC_MODE_DRY
+    off = HVAC_MODE_OFF
+    cool = HVAC_MODE_COOL
+    heat = HVAC_MODE_HEAT
+    dry = HVAC_MODE_DRY
+
+    def command(self):
+        return BEDJET_COMMANDS.get(self.value)
 
 
 class PresetMode(Enum):
-    OFF = HVACMode.OFF
-    COOL = HVACMode.COOL
-    HEAT = HVACMode.HEAT
-    DRY = HVACMode.DRY
-    TURBO = 'turbo'
-    EXT_HT = 'ext_ht'
+    off = HVACMode.off.value
+    cool = HVACMode.cool.value
+    heat = HVACMode.heat.value
+    dry = HVACMode.dry.value
+    turbo = 'turbo'
+    ext_ht = 'ext_ht'
 
     def to_hvac(self) -> HVACMode:
         map = {
-            PresetMode.OFF: HVACMode.OFF,
-            PresetMode.COOL: HVACMode.COOL,
-            PresetMode.HEAT: HVACMode.HEAT,
-            PresetMode.DRY: HVACMode.DRY,
-            PresetMode.TURBO: HVACMode.HEAT,
-            PresetMode.EXT_HT: HVACMode.HEAT
+            PresetMode.off: HVACMode.off,
+            PresetMode.cool: HVACMode.cool,
+            PresetMode.heat: HVACMode.heat,
+            PresetMode.dry: HVACMode.dry,
+            PresetMode.turbo: HVACMode.heat,
+            PresetMode.ext_ht: HVACMode.heat
         }
 
-        return map(self)
+        return map.get(self)
+
+    def command(self):
+        return BEDJET_COMMANDS.get(self.value)
 
 
 class BedJet(ClimateEntity):
@@ -172,19 +178,19 @@ class BedJet(ClimateEntity):
 
     @property
     def hvac_mode(self) -> str | None:
-        return self._hvac_mode.value
+        return self._hvac_mode.value if self._hvac_mode else None
 
     @property
     def preset_mode(self) -> str | None:
-        return self._preset_mode.value
+        return self._preset_mode.value if self._preset_mode else None
 
     @property
     def client(self) -> BleakClient:
         return self._client
 
     @property
-    def fan_mode(self) -> str:
-        return FanMode.get_fan_mode(self.fan_pct).name
+    def fan_mode(self) -> str | None:
+        return FanMode.get_fan_mode(self.fan_pct).name if self.fan_pct else None
 
     @property
     def last_seen(self) -> datetime:
@@ -251,11 +257,11 @@ class BedJet(ClimateEntity):
         self._fan_pct = value
 
     @hvac_mode.setter
-    def hvac_mode(self, value: str):
+    def hvac_mode(self, value: HVACMode):
         self._hvac_mode = value
 
     @preset_mode.setter
-    def preset_mode(self, value: str):
+    def preset_mode(self, value: PresetMode):
         self._preset_mode = value
 
     @client.setter
@@ -264,11 +270,7 @@ class BedJet(ClimateEntity):
 
     @last_seen.setter
     def last_seen(self, value: datetime):
-        self.set_state_attr('last_seen', value)
-
-    @is_connected.setter
-    def is_connected(self, value: bool):
-        self.set_state_attr('available', 'online' if value else 'offline')
+        self._last_seen = value
 
     async def connect(self, max_retries=10):
         reconnect_interval = 3
@@ -306,6 +308,7 @@ class BedJet(ClimateEntity):
     def on_disconnect(self, client: BleakClient):
         _LOGGER.warning(f'Disconnected from {self.mac}.')
         self.client.set_disconnected_callback(None)
+        self.schedule_update_ha_state()
         asyncio.create_task(self.connect_and_subscribe())
 
     async def disconnect(self):
@@ -330,17 +333,17 @@ class BedJet(ClimateEntity):
 
         def get_preset_mode(value) -> PresetMode:
             if value[14] == 0x50 and value[13] == 0x14:
-                return PresetMode.OFF
+                return PresetMode.off
             if value[14] == 0x34:
-                return PresetMode.COOL
+                return PresetMode.cool
             if value[14] == 0x56:
-                return PresetMode.TURBO
+                return PresetMode.turbo
             if value[14] == 0x50 and value[13] == 0x2d:
-                return PresetMode.HEAT
+                return PresetMode.heat
             if value[14] == 0x3e:
-                return PresetMode.HEAT
+                return PresetMode.heat
             if value[14] == 0x43:
-                return PresetMode.EXT_HT
+                return PresetMode.ext_ht
 
         def get_hvac_mode(value) -> HVACMode:
             return get_preset_mode(value).to_hvac()
@@ -350,8 +353,8 @@ class BedJet(ClimateEntity):
         self.time = get_time(value)
         self.timestring = get_timestring(value)
         self.fan_pct = get_fan_pct(value)
-        self.hvac_mode = get_hvac_mode(value).value
-        self.preset_mode = get_preset_mode(value).value
+        self.hvac_mode = get_hvac_mode(value)
+        self.preset_mode = get_preset_mode(value)
         self.last_seen = datetime.now()
 
         self.schedule_update_ha_state()
@@ -413,8 +416,8 @@ class BedJet(ClimateEntity):
         await self.send_command([0x03, temp_byte])
 
     async def async_set_hvac_mode(self, hvac_mode: str):
-        await self.set_mode(BEDJET_COMMANDS.get(hvac_mode))
+        await self.set_mode(HVACMode(hvac_mode).command())
         await self.set_time(600)
 
     async def async_set_preset_mode(self, preset_mode: str):
-        await self.set_mode(BEDJET_COMMANDS.get(preset_mode))
+        await self.set_mode(PresetMode(preset_mode).command())

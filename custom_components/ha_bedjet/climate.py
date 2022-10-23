@@ -1,6 +1,5 @@
 from typing import TypedDict, Union
 from homeassistant.const import (
-    ATTR_TEMPERATURE,
     TEMP_FAHRENHEIT
 )
 from homeassistant.components.climate.const import (
@@ -21,10 +20,8 @@ from bleak import BleakClient, BleakError
 
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.const import (CONF_NAME, CONF_MAC)
-import homeassistant.util.dt as dt_util
-from homeassistant.helpers.entity import Entity
-from homeassistant.util import Throttle
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.device_registry import format_mac
 
 BEDJET_COMMAND_UUID = '00002004-bed0-0080-aa55-4265644a6574'
 BEDJET_SUBSCRIPTION_UUID = '00002000-bed0-0080-aa55-4265644a6574'
@@ -66,26 +63,41 @@ except ImportError:
 
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Required(CONF_NAME): cv.string,
-    vol.Required(CONF_MAC): cv.string
+    vol.Optional(CONF_NAME, default=''): cv.string,
+    vol.Optional(CONF_MAC, default=''): cv.string,
 })
 
 
 async def async_setup_platform(hass, config, add_entities, discovery_info=None):
     mac = config.get(CONF_MAC).upper()
 
-    bluetooth.async_rediscover_address(hass, "44:44:33:11:23:42")
-    service_infos = bluetooth.async_discovered_service_info(
-        hass, connectable=True)
-    _LOGGER.info(service_infos)
-    device = bluetooth.async_ble_device_from_address(
-        hass, mac, connectable=True)
+    if config.get(CONF_NAME) != '':
+        _LOGGER.warn(
+            f'{CONF_NAME} is a deprecated option and will be ignored.')
 
-    _LOGGER.info(device)
+    if not mac or mac == '':
+        _LOGGER.info('Setting up all discoverable BedJets.')
+        service_infos = bluetooth.async_discovered_service_info(
+            hass, connectable=True)
 
-    add_entities(
-        [BedJet(device, mac)]
-    )
+        bedjet_devices = [
+            service_info.device for service_info in service_infos if service_info.name == 'BEDJET_V3']
+
+        _LOGGER.info(
+            f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.')
+
+        bedjets = [BedJet(device) for device in bedjet_devices]
+
+    else:
+        _LOGGER.info(f'Setting up BedJet with mac address {mac}.')
+        device = bluetooth.async_ble_device_from_address(
+            hass, mac, connectable=True)
+        bedjets = [BedJet(device)]
+
+    for bedjet in bedjets:
+        asyncio.create_task(bedjet.connect_and_subscribe())
+
+    add_entities(bedjets)
 
 
 class BedJetState(TypedDict):
@@ -102,28 +114,18 @@ class BedJetState(TypedDict):
 
 
 class BedJet(ClimateEntity):
-    def __init__(self, device, mac):
-        self._mac = mac
+    def __init__(self, device):
+        self._mac = device.address
 
         self._state: BedJetState = BedJetState()
 
         self.client = BleakClient(
             device, disconnected_callback=self.on_disconnect)
 
-        self.current_temperature = None
-        self.target_temperature = None
-        self.hvac_mode = None
-        self.preset_mode = None
-        self.time = None
-        self.timestring = None
-        self.fan_pct = None
-        self.last_seen = None
-        self.is_connected = False
-
-        asyncio.create_task(self.connect_and_subscribe())
+        self.is_connected = self.client.is_connected
 
     def state_attr(self, attr: str) -> Union[int, str, datetime]:
-        return self.state.get(attr)
+        return self.bedjet_state.get(attr)
 
     def set_state_attr(self, attr: str, value: Union[int, str, datetime]):
         if self.state_attr(attr) == value:
@@ -136,8 +138,12 @@ class BedJet(ClimateEntity):
         return self._mac
 
     @property
-    def state(self):
+    def bedjet_state(self):
         return self._state
+
+    @property
+    def state(self):
+        return self.hvac_mode
 
     @property
     def current_temperature(self) -> int:
@@ -185,7 +191,7 @@ class BedJet(ClimateEntity):
 
     @property
     def name(self):
-        return f'bedjet_{self.mac}'
+        return f'bedjet_{format_mac(self.mac)}'
 
     @property
     def unique_id(self):
@@ -198,14 +204,6 @@ class BedJet(ClimateEntity):
     @property
     def temperature_unit(self):
         return TEMP_FAHRENHEIT
-
-    @property
-    def current_temperature(self):
-        return self._current_temperature
-
-    @property
-    def target_temperature(self):
-        return self._target_temperature
 
     @property
     def available(self):
@@ -292,10 +290,8 @@ class BedJet(ClimateEntity):
             try:
                 _LOGGER.info(f'Attempting to connect to {self.mac}.')
                 await self.client.connect()
-                self.is_connected = True
-                _LOGGER.info(f'Connected to {self.mac}.')
-                break
-            except BleakError as error:
+                self.is_connected = self.client.is_connected
+            except Exception as error:
                 backoff_seconds = (i+1) * reconnect_interval
                 _LOGGER.error(
                     f'Error "{error}". Retrying in {backoff_seconds} seconds.')
@@ -306,6 +302,10 @@ class BedJet(ClimateEntity):
                 except BleakError as error:
                     _LOGGER.error(f'Error "{error}".')
                 await asyncio.sleep(backoff_seconds)
+
+            if self.is_connected:
+                _LOGGER.info(f'Connected to {self.mac}.')
+                break
 
         if not self.is_connected:
             _LOGGER.error(
@@ -377,9 +377,15 @@ class BedJet(ClimateEntity):
         self.preset_mode = get_preset_mode(value)
         self.last_seen = datetime.now()
 
+        self.schedule_update_ha_state()
+
     async def subscribe(self, max_retries=10):
         reconnect_interval = 3
         is_subscribed = False
+
+        if not self.client.is_connected:
+            await self.connect()
+
         for i in range(0, max_retries):
             try:
                 _LOGGER.info(
@@ -390,7 +396,7 @@ class BedJet(ClimateEntity):
                 _LOGGER.info(
                     f'Subscribed to {self.mac} on {BEDJET_SUBSCRIPTION_UUID}.')
                 break
-            except BleakError as error:
+            except Exception as error:
                 backoff_seconds = (i+1) * reconnect_interval
                 _LOGGER.error(
                     f'Error "{error}". Retrying in {backoff_seconds} seconds.')
@@ -413,7 +419,7 @@ class BedJet(ClimateEntity):
     async def set_time(self, minutes):
         return await self.send_command([0x02, minutes // 60, minutes % 60])
 
-    async def set_fan_mode(self, fan_mode):
+    async def async_set_fan_mode(self, fan_mode):
         if str(fan_mode).isnumeric():
             fan_pct = int(fan_mode)
         else:

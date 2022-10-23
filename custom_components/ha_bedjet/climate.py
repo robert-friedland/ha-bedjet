@@ -17,7 +17,7 @@ import logging
 from homeassistant.components import bluetooth
 import asyncio
 import voluptuous as vol
-from bleak import BleakError
+from bleak import BleakClient, BleakError
 
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.const import (CONF_NAME, CONF_MAC)
@@ -26,7 +26,30 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
 import homeassistant.helpers.config_validation as cv
 
-from const import BEDJET_FAN_MODES, BEDJET_COMMAND_UUID, BEDJET_COMMANDS, BEDJET_SUBSCRIPTION_UUID
+BEDJET_COMMAND_UUID = '00002004-bed0-0080-aa55-4265644a6574'
+BEDJET_SUBSCRIPTION_UUID = '00002000-bed0-0080-aa55-4265644a6574'
+BEDJET_COMMANDS = {
+    "off": 0x01,
+    "cool": 0x02,
+    "heat": 0x03,
+    "turbo": 0x04,
+    "dry": 0x05,
+    "ext_ht": 0x06,
+    "fan_up": 0x10,
+    "fan_down": 0x11,
+    "temp_up": 0x12,
+    "temp_down": 0x13,
+    "m1": 0x20,
+    "m2": 0x21,
+    "m3": 0x22
+}
+BEDJET_FAN_MODES = {
+    "FAN_MIN": 10,
+    "FAN_LOW": 25,
+    "FAN_MEDIUM": 50,
+    "FAN_HIGH": 75,
+    "FAN_MAX": 100
+}
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +64,6 @@ except ImportError:
         PLATFORM_SCHEMA,
     )
 
-MIN_TIME_BETWEEN_UPDATES = datetime.timedelta(seconds=120)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_NAME): cv.string,
@@ -49,14 +71,20 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 
-def setup_platform(hass, config, add_entities, discovery_info=None):
-    name = config.get(CONF_NAME)
-    mac = config.get(CONF_MAC)
+async def async_setup_platform(hass, config, add_entities, discovery_info=None):
+    mac = config.get(CONF_MAC).upper()
+
+    bluetooth.async_rediscover_address(hass, "44:44:33:11:23:42")
+    service_infos = bluetooth.async_discovered_service_info(
+        hass, connectable=True)
+    _LOGGER.info(service_infos)
     device = bluetooth.async_ble_device_from_address(
         hass, mac, connectable=True)
 
+    _LOGGER.info(device)
+
     add_entities(
-        [BedJet(device, name, mac)]
+        [BedJet(device, mac)]
     )
 
 
@@ -79,8 +107,8 @@ class BedJet(ClimateEntity):
 
         self._state: BedJetState = BedJetState()
 
-        self.client = device
-        self.client.set_disconnected_callback(self.on_disconnect)
+        self.client = BleakClient(
+            device, disconnected_callback=self.on_disconnect)
 
         self.current_temperature = None
         self.target_temperature = None
@@ -90,9 +118,9 @@ class BedJet(ClimateEntity):
         self.timestring = None
         self.fan_pct = None
         self.last_seen = None
-        self.is_connected = True
+        self.is_connected = False
 
-        asyncio.create_task(self.subscribe())
+        asyncio.create_task(self.connect_and_subscribe())
 
     def state_attr(self, attr: str) -> Union[int, str, datetime]:
         return self.state.get(attr)

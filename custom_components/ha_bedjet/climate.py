@@ -2,13 +2,7 @@ from homeassistant.const import (
     TEMP_FAHRENHEIT
 )
 from homeassistant.components.climate.const import (
-    SUPPORT_TARGET_TEMPERATURE,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_FAN_MODE,
-    HVAC_MODE_OFF,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_COOL,
-    HVAC_MODE_DRY
+    HVACMode, ClimateEntityFeature
 )
 from datetime import datetime
 import logging
@@ -25,8 +19,12 @@ from homeassistant.helpers.device_registry import format_mac
 
 from enum import Enum
 
-from .const import (BEDJET_COMMAND_UUID, BEDJET_COMMANDS,
-                    BEDJET_SUBSCRIPTION_UUID)
+from .const import (
+    BEDJET_COMMAND_UUID,
+    BEDJET_SUBSCRIPTION_UUID,
+    FanMode,
+    PresetMode
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -79,59 +77,6 @@ async def async_setup_platform(hass, config, add_entities, discovery_info=None):
         asyncio.create_task(bedjet.connect_and_subscribe())
 
     add_entities(bedjets)
-
-
-class FanMode(Enum):
-    FAN_MIN = 10
-    FAN_LOW = 25
-    FAN_MEDIUM = 50
-    FAN_HIGH = 75
-    FAN_MAX = 100
-
-    @staticmethod
-    def get_fan_mode(fan_pct: int | None):
-        if not fan_pct:
-            return None
-
-        for fan_mode in FanMode:
-            if fan_pct <= fan_mode.value:
-                return fan_mode
-
-        return None
-
-
-class HVACMode(Enum):
-    off = HVAC_MODE_OFF
-    cool = HVAC_MODE_COOL
-    heat = HVAC_MODE_HEAT
-    dry = HVAC_MODE_DRY
-
-    def command(self):
-        return BEDJET_COMMANDS.get(self.value)
-
-
-class PresetMode(Enum):
-    off = HVACMode.off.value
-    cool = HVACMode.cool.value
-    heat = HVACMode.heat.value
-    dry = HVACMode.dry.value
-    turbo = 'turbo'
-    ext_ht = 'ext_ht'
-
-    def to_hvac(self) -> HVACMode:
-        map = {
-            PresetMode.off: HVACMode.off,
-            PresetMode.cool: HVACMode.cool,
-            PresetMode.heat: HVACMode.heat,
-            PresetMode.dry: HVACMode.dry,
-            PresetMode.turbo: HVACMode.heat,
-            PresetMode.ext_ht: HVACMode.heat
-        }
-
-        return map.get(self)
-
-    def command(self):
-        return BEDJET_COMMANDS.get(self.value)
 
 
 class BedJet(ClimateEntity):
@@ -218,7 +163,7 @@ class BedJet(ClimateEntity):
 
     @property
     def supported_features(self):
-        return SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE | SUPPORT_FAN_MODE
+        return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE | ClimateEntityFeature.FAN_MODE
 
     @property
     def preset_modes(self) -> list[str]:
@@ -333,17 +278,17 @@ class BedJet(ClimateEntity):
 
         def get_preset_mode(value) -> PresetMode:
             if value[14] == 0x50 and value[13] == 0x14:
-                return PresetMode.off
+                return PresetMode.OFF
             if value[14] == 0x34:
-                return PresetMode.cool
+                return PresetMode.COOL
             if value[14] == 0x56:
-                return PresetMode.turbo
+                return PresetMode.TURBO
             if value[14] == 0x50 and value[13] == 0x2d:
-                return PresetMode.heat
+                return PresetMode.HEAT
             if value[14] == 0x3e:
-                return PresetMode.heat
+                return PresetMode.HEAT
             if value[14] == 0x43:
-                return PresetMode.ext_ht
+                return PresetMode.EXT_HT
 
         def get_hvac_mode(value) -> HVACMode:
             return get_preset_mode(value).to_hvac()
@@ -416,7 +361,7 @@ class BedJet(ClimateEntity):
         await self.send_command([0x03, temp_byte])
 
     async def async_set_hvac_mode(self, hvac_mode: str):
-        await self.set_mode(HVACMode(hvac_mode).command())
+        await self.set_mode(PresetMode(hvac_mode).command())
         await self.set_time(600)
 
     async def async_set_preset_mode(self, preset_mode: str):

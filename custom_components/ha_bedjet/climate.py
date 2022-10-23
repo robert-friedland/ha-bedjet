@@ -301,6 +301,7 @@ class BedJet(ClimateEntity):
 
             if self.is_connected:
                 _LOGGER.info(f'Connected to {self.mac}.')
+                self.client.set_disconnected_callback(self.on_disconnect)
                 break
 
         if not self.is_connected:
@@ -316,6 +317,7 @@ class BedJet(ClimateEntity):
     def on_disconnect(self, client):
         self.is_connected = False
         _LOGGER.warning(f'Disconnected from {self.mac}.')
+        self.client.set_disconnected_callback(None)
         asyncio.create_task(self.connect_and_subscribe())
 
     async def disconnect(self):

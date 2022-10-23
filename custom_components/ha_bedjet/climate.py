@@ -1,4 +1,3 @@
-from typing import TypedDict, Union
 from homeassistant.const import (
     TEMP_FAHRENHEIT
 )
@@ -17,36 +16,18 @@ from homeassistant.components import bluetooth
 import asyncio
 import voluptuous as vol
 from bleak import BleakClient, BleakError
+from bleak.backends.device import BLEDevice
 
 from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.const import (CONF_NAME, CONF_MAC)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import format_mac
 
-BEDJET_COMMAND_UUID = '00002004-bed0-0080-aa55-4265644a6574'
-BEDJET_SUBSCRIPTION_UUID = '00002000-bed0-0080-aa55-4265644a6574'
-BEDJET_COMMANDS = {
-    "off": 0x01,
-    "cool": 0x02,
-    "heat": 0x03,
-    "turbo": 0x04,
-    "dry": 0x05,
-    "ext_ht": 0x06,
-    "fan_up": 0x10,
-    "fan_down": 0x11,
-    "temp_up": 0x12,
-    "temp_down": 0x13,
-    "m1": 0x20,
-    "m2": 0x21,
-    "m3": 0x22
-}
-BEDJET_FAN_MODES = {
-    "FAN_MIN": 10,
-    "FAN_LOW": 25,
-    "FAN_MEDIUM": 50,
-    "FAN_HIGH": 75,
-    "FAN_MAX": 100
-}
+from enum import Enum
+
+from .const import (BEDJET_COMMAND_UUID, BEDJET_COMMANDS,
+                    BEDJET_SUBSCRIPTION_UUID)
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,185 +81,196 @@ async def async_setup_platform(hass, config, add_entities, discovery_info=None):
     add_entities(bedjets)
 
 
-class BedJetState(TypedDict):
-    current_temperature: int
-    target_temperature: int
-    hvac_mode: str
-    preset_mode: str
-    time: str
-    timestring: str
-    fan_pct: int
-    fan_mode: str
-    last_seen: datetime
-    available: str
+class FanMode(Enum):
+    FAN_MIN = 10
+    FAN_LOW = 25
+    FAN_MEDIUM = 50
+    FAN_HIGH = 75
+    FAN_MAX = 100
+
+    @staticmethod
+    def get_fan_mode(fan_pct: int | None):
+        if not fan_pct:
+            return None
+
+        for fan_mode in FanMode:
+            if fan_pct <= fan_mode.value:
+                return fan_mode
+
+        return None
+
+
+class HVACMode(Enum):
+    off = HVAC_MODE_OFF
+    cool = HVAC_MODE_COOL
+    heat = HVAC_MODE_HEAT
+    dry = HVAC_MODE_DRY
+
+    def command(self):
+        return BEDJET_COMMANDS.get(self.value)
+
+
+class PresetMode(Enum):
+    off = HVACMode.off.value
+    cool = HVACMode.cool.value
+    heat = HVACMode.heat.value
+    dry = HVACMode.dry.value
+    turbo = 'turbo'
+    ext_ht = 'ext_ht'
+
+    def to_hvac(self) -> HVACMode:
+        map = {
+            PresetMode.off: HVACMode.off,
+            PresetMode.cool: HVACMode.cool,
+            PresetMode.heat: HVACMode.heat,
+            PresetMode.dry: HVACMode.dry,
+            PresetMode.turbo: HVACMode.heat,
+            PresetMode.ext_ht: HVACMode.heat
+        }
+
+        return map.get(self)
+
+    def command(self):
+        return BEDJET_COMMANDS.get(self.value)
 
 
 class BedJet(ClimateEntity):
-    def __init__(self, device):
-        self._mac = device.address
-
-        self._state: BedJetState = BedJetState()
-
-        self.client = BleakClient(
+    def __init__(self, device: BLEDevice):
+        self._mac: str = device.address
+        self._client: BleakClient = BleakClient(
             device, disconnected_callback=self.on_disconnect)
-
-        self.is_connected = self.client.is_connected
-
-    def state_attr(self, attr: str) -> Union[int, str, datetime]:
-        return self.bedjet_state.get(attr)
-
-    def set_state_attr(self, attr: str, value: Union[int, str, datetime]):
-        if self.state_attr(attr) == value:
-            return
-
-        self._state[attr] = value
+        self._current_temperature: int | None = None
+        self._target_temperature: int | None = None
+        self._hvac_mode: HVACMode | None = None
+        self._preset_mode: PresetMode | None = None
+        self._time: str | None = None
+        self._timestring: str | None = None
+        self._fan_pct: int | None = None
+        self._last_seen: datetime | None = None
 
     @property
-    def mac(self):
+    def mac(self) -> str:
         return self._mac
 
     @property
-    def bedjet_state(self):
-        return self._state
-
-    @property
-    def state(self):
+    def state(self) -> str | None:
         return self.hvac_mode
 
     @property
-    def current_temperature(self) -> int:
-        return self.state_attr('current_temperature')
+    def current_temperature(self) -> int | None:
+        return self._current_temperature
 
     @property
-    def target_temperature(self) -> int:
-        return self.state_attr('target_temperature')
+    def target_temperature(self) -> int | None:
+        return self._target_temperature
 
     @property
-    def time(self) -> str:
-        return self.state_attr('time')
+    def time(self) -> str | None:
+        return self._time
 
     @property
-    def timestring(self) -> str:
-        return self.state_attr('timestring')
+    def timestring(self) -> str | None:
+        return self._timestring
 
     @property
-    def fan_pct(self) -> int:
-        return self.state_attr('fan_pct')
+    def fan_pct(self) -> int | None:
+        return self._fan_pct
 
     @property
-    def hvac_mode(self) -> str:
-        return self.state_attr('hvac_mode')
+    def hvac_mode(self) -> str | None:
+        return self._hvac_mode.value if self._hvac_mode else None
 
     @property
-    def preset_mode(self) -> str:
-        return self.state_attr('preset_mode')
+    def preset_mode(self) -> str | None:
+        return self._preset_mode.value if self._preset_mode else None
 
     @property
-    def client(self):
+    def client(self) -> BleakClient:
         return self._client
 
     @property
-    def fan_mode(self) -> str:
-        return self.state_attr('fan_mode')
+    def fan_mode(self) -> str | None:
+        return FanMode.get_fan_mode(self.fan_pct).name if self.fan_pct else None
 
     @property
     def last_seen(self) -> datetime:
-        return self.state_attr('last_seen')
+        return self._last_seen
 
     @property
-    def is_connected(self):
-        return self.state_attr('available') == 'online'
+    def is_connected(self) -> bool:
+        return self.client.is_connected
 
     @property
-    def name(self):
+    def name(self) -> str:
         return f'bedjet_{format_mac(self.mac)}'
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
         return f'climate_{self.name}'
 
     @property
-    def temperature_unit(self):
+    def temperature_unit(self) -> str:
         return TEMP_FAHRENHEIT
 
     @property
-    def available(self):
-        return self.is_connected
-
-    @property
-    def last_seen(self):
-        return self.last_seen
-
-    @property
-    def hvac_modes(self):
-        return [HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_DRY]
+    def hvac_modes(self) -> list[str]:
+        return [mode.value for mode in HVACMode]
 
     @property
     def supported_features(self):
         return SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE | SUPPORT_FAN_MODE
 
     @property
-    def preset_modes(self):
-        return ['off', 'cool', 'heat', 'turbo', 'dry', 'ext_ht', 'm1', 'm2', 'm3']
+    def preset_modes(self) -> list[str]:
+        return [mode.value for mode in PresetMode]
 
     @property
-    def fan_modes(self):
-        return ['FAN_MIN', 'FAN_LOW', 'FAN_MEDIUM', 'FAN_HIGH', 'FAN_MAX']
+    def fan_modes(self) -> list[str]:
+        return [mode.name for mode in FanMode]
 
     @property
-    def min_temp(self):
+    def min_temp(self) -> int:
         return 66
 
     @property
-    def max_temp(self):
+    def max_temp(self) -> int:
         return 109
 
     @current_temperature.setter
     def current_temperature(self, value: int):
-        self.set_state_attr('current_temperature', value)
+        self._current_temperature = value
 
     @target_temperature.setter
     def target_temperature(self, value: int):
-        self.set_state_attr('target_temperature', value)
+        self._target_temperature = value
 
     @time.setter
     def time(self, value: str):
-        self.set_state_attr('time', value)
+        self._time = value
 
     @timestring.setter
     def timestring(self, value: str):
-        self.set_state_attr('timestring', value)
+        self._timestring = value
 
     @fan_pct.setter
     def fan_pct(self, value: int):
-        self.set_state_attr('fan_pct', value)
-        self.set_state_attr('fan_mode', self.determine_fan_mode(value))
-
-    def determine_fan_mode(self, fan_pct: int) -> str:
-        fan_pct = fan_pct or 0
-        for fan_mode, pct in BEDJET_FAN_MODES.items():
-            if fan_pct <= pct:
-                return fan_mode
+        self._fan_pct = value
 
     @hvac_mode.setter
-    def hvac_mode(self, value: str):
-        self.set_state_attr('hvac_mode', value)
+    def hvac_mode(self, value: HVACMode):
+        self._hvac_mode = value
 
     @preset_mode.setter
-    def preset_mode(self, value: str):
-        self.set_state_attr('preset_mode', value)
+    def preset_mode(self, value: PresetMode):
+        self._preset_mode = value
 
     @client.setter
-    def client(self, value):
+    def client(self, value: BleakClient):
         self._client = value
 
     @last_seen.setter
     def last_seen(self, value: datetime):
-        self.set_state_attr('last_seen', value)
-
-    @is_connected.setter
-    def is_connected(self, value: bool):
-        self.set_state_attr('available', 'online' if value else 'offline')
+        self._last_seen = value
 
     async def connect(self, max_retries=10):
         reconnect_interval = 3
@@ -286,7 +278,6 @@ class BedJet(ClimateEntity):
             try:
                 _LOGGER.info(f'Attempting to connect to {self.mac}.')
                 await self.client.connect()
-                self.is_connected = self.client.is_connected
             except Exception as error:
                 backoff_seconds = (i+1) * reconnect_interval
                 _LOGGER.error(
@@ -310,14 +301,14 @@ class BedJet(ClimateEntity):
             raise Exception(
                 f'Failed to connect to {self.mac} after {max_retries} attempts.')
 
-    async def connect_and_subscribe(self, max_retries=10):
+    async def connect_and_subscribe(self, max_retries: int = 10):
         await self.connect(max_retries)
         await self.subscribe(max_retries)
 
-    def on_disconnect(self, client):
-        self.is_connected = False
+    def on_disconnect(self, client: BleakClient):
         _LOGGER.warning(f'Disconnected from {self.mac}.')
         self.client.set_disconnected_callback(None)
+        self.schedule_update_ha_state()
         asyncio.create_task(self.connect_and_subscribe())
 
     async def disconnect(self):
@@ -325,46 +316,37 @@ class BedJet(ClimateEntity):
         await self.client.disconnect()
 
     def handle_data(self, handle, value):
-        def get_current_temperature(value):
+        def get_current_temperature(value) -> int:
             return round(((int(value[7]) - 0x26) + 66) - ((int(value[7]) - 0x26) / 9))
 
-        def get_target_temperature(value):
+        def get_target_temperature(value) -> int:
             return round(((int(value[8]) - 0x26) + 66) - ((int(value[8]) - 0x26) / 9))
 
-        def get_time(value):
+        def get_time(value) -> int:
             return (int(value[4]) * 60 * 60) + (int(value[5]) * 60) + int(value[6])
 
-        def get_timestring(value):
+        def get_timestring(value) -> str:
             return str(int(value[4])) + ":" + str(int(value[5])) + ":" + str(int(value[6]))
 
-        def get_fan_pct(value):
+        def get_fan_pct(value) -> int:
             return int(value[10]) * 5
 
-        def get_preset_mode(value):
+        def get_preset_mode(value) -> PresetMode:
             if value[14] == 0x50 and value[13] == 0x14:
-                return "off"
+                return PresetMode.off
             if value[14] == 0x34:
-                return "cool"
+                return PresetMode.cool
             if value[14] == 0x56:
-                return "turbo"
+                return PresetMode.turbo
             if value[14] == 0x50 and value[13] == 0x2d:
-                return "heat"
+                return PresetMode.heat
             if value[14] == 0x3e:
-                return "dry"
+                return PresetMode.heat
             if value[14] == 0x43:
-                return "ext_ht"
+                return PresetMode.ext_ht
 
-        def get_hvac_mode(value):
-            PRESET_TO_HVAC = {
-                'off': 'off',
-                'cool': 'cool',
-                'turbo': 'heat',
-                'heat': 'heat',
-                'dry': 'dry',
-                'ext_ht': 'heat'
-            }
-
-            return PRESET_TO_HVAC[get_preset_mode(value)]
+        def get_hvac_mode(value) -> HVACMode:
+            return get_preset_mode(value).to_hvac()
 
         self.current_temperature = get_current_temperature(value)
         self.target_temperature = get_target_temperature(value)
@@ -377,7 +359,7 @@ class BedJet(ClimateEntity):
 
         self.schedule_update_ha_state()
 
-    async def subscribe(self, max_retries=10):
+    async def subscribe(self, max_retries: int = 10):
         reconnect_interval = 3
         is_subscribed = False
 
@@ -417,11 +399,11 @@ class BedJet(ClimateEntity):
     async def set_time(self, minutes):
         return await self.send_command([0x02, minutes // 60, minutes % 60])
 
-    async def async_set_fan_mode(self, fan_mode):
+    async def async_set_fan_mode(self, fan_mode: FanMode | int | float):
         if str(fan_mode).isnumeric():
             fan_pct = int(fan_mode)
         else:
-            fan_pct = BEDJET_FAN_MODES.get(fan_mode)
+            fan_pct = FanMode[fan_mode].value
 
         if not (fan_pct >= 0 and fan_pct <= 100):
             return
@@ -433,9 +415,9 @@ class BedJet(ClimateEntity):
         temp_byte = (int((temp - 60) / 9) + (temp - 66)) + 0x26
         await self.send_command([0x03, temp_byte])
 
-    async def async_set_hvac_mode(self, hvac_mode):
-        await self.set_mode(BEDJET_COMMANDS.get(hvac_mode))
+    async def async_set_hvac_mode(self, hvac_mode: str):
+        await self.set_mode(HVACMode(hvac_mode).command())
         await self.set_time(600)
 
-    async def async_set_preset_mode(self, preset_mode):
-        await self.set_mode(BEDJET_COMMANDS.get(preset_mode))
+    async def async_set_preset_mode(self, preset_mode: str):
+        await self.set_mode(PresetMode(preset_mode).command())

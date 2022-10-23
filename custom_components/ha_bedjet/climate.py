@@ -198,10 +198,6 @@ class BedJet(ClimateEntity):
         return f'climate_{self.name}'
 
     @property
-    def should_poll(self):
-        return True
-
-    @property
     def temperature_unit(self):
         return TEMP_FAHRENHEIT
 

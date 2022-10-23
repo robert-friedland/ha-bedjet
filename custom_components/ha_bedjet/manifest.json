@@ -4,8 +4,5 @@
     "documentation": "https://github.com/robert-friedland/ha-bedjet",
     "dependencies": [],
     "codeowners": ["@robert-friedland"],
-    "version": "0.1.0",
-    "requirements": [
-        "bleak==0.15.1"
-    ]
+    "version": "0.1.0"
 }

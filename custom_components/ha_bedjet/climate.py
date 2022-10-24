@@ -198,6 +198,10 @@ class BedJet(ClimateEntity):
         return self._last_seen
 
     @property
+    def is_connected(self) -> bool:
+        return self.client.is_connected
+
+    @property
     def available(self) -> bool:
         return self.client.is_connected
 

@@ -1,5 +1,6 @@
 from homeassistant.const import (
-    TEMP_FAHRENHEIT
+    TEMP_FAHRENHEIT,
+    ATTR_TEMPERATURE
 )
 from homeassistant.components.climate.const import (
     SUPPORT_TARGET_TEMPERATURE,
@@ -410,7 +411,8 @@ class BedJet(ClimateEntity):
 
         await self.send_command([0x07, round(fan_pct/5)-1])
 
-    async def async_set_temperature(self, temperature):
+    async def async_set_temperature(self, **kwargs):
+        temperature = int(kwargs.get(ATTR_TEMPERATURE))
         temp = round(float(temperature))
         temp_byte = (int((temp - 60) / 9) + (temp - 66)) + 0x26
         await self.send_command([0x03, temp_byte])

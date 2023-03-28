@@ -4,5 +4,5 @@
     "documentation": "https://github.com/asheliahut/ha-bedjet",
     "dependencies": [],
     "codeowners": ["@robert-friedland", "@asheliahut"],
-    "version": "0.1.0"
+    "version": "0.1.1"
 }

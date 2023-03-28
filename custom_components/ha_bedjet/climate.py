@@ -23,6 +23,7 @@ from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.const import (CONF_NAME, CONF_MAC)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.entity import DeviceInfo
 
 from enum import Enum
 
@@ -31,6 +32,8 @@ from .const import (BEDJET_COMMAND_UUID, BEDJET_COMMANDS,
 
 
 _LOGGER = logging.getLogger(__name__)
+
+DOMAIN = 'bedjet'
 
 try:
     from homeassistant.components.climate import (
@@ -239,6 +242,20 @@ class BedJet(ClimateEntity):
     @property
     def max_temp(self) -> int:
         return 109
+    
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={
+                # Serial numbers are unique identifiers within a specific domain
+                (DOMAIN, self.unique_id)
+            },
+            name=self.name,
+            manufacturer="BedJet",
+            model="BedJet",
+            hw_version="3.0"
+        )
 
     @current_temperature.setter
     def current_temperature(self, value: int):

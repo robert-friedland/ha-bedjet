@@ -5,7 +5,7 @@ This project contains a climate entity that provides control of a [BedJet](https
 ## Installation (HACS) - Recommended
 
 0. Have [HACS](https://custom-components.github.io/hacs/installation/manual/) installed, this will allow you to easily update
-1. Add `https://github.com/robert-friedland/ha-bedjet` as a [custom repository](https://custom-components.github.io/hacs/usage/settings/#add-custom-repositories) as Type: Integration
+1. Add `https://github.com/asheliahut/ha-bedjet` as a [custom repository](https://custom-components.github.io/hacs/usage/settings/#add-custom-repositories) as Type: Integration
 2. Click install under "HA-BedJet", restart your instance.
 
 ## Installation (Manual)

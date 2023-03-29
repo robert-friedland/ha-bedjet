@@ -2,7 +2,11 @@
   "config": {
     "step": {
       "user": {
-        "title": "Bedjet Configuration",
+        "title": "Bedjet Configuration Update",
+        "description": "Enter the MAC address of your Bedjet device (optional)."
+      },
+      "init": {
+        "title": "Bedjet Configuration Initial",
         "description": "Enter the MAC address of your Bedjet device (optional)."
       }
     },

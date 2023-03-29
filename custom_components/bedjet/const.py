@@ -13,5 +13,5 @@ BEDJET_COMMANDS = {
     "temp_down": 0x13,
     "m1": 0x20,
     "m2": 0x21,
-    "chill": 0x22
+    "m3": 0x22
 }

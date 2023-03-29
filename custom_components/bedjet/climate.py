@@ -120,7 +120,7 @@ class PresetMode(Enum):
     ext_ht = 'ext_ht'
     m1 = 'm1'
     m2 = 'm2'
-    chill = 'chill'
+    m3 = 'm3'
 
     def to_hvac(self) -> HVACMode:
         map = {
@@ -367,7 +367,7 @@ class BedjetDeviceEntity(ClimateEntity):
             if value[14] == 0x21:
                 return PresetMode.m2
             if value[14] == 0x22:
-                return PresetMode.chill
+                return PresetMode.m3
             
         def get_hvac_mode(value) -> HVACMode:
             return get_preset_mode(value).to_hvac()

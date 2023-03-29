@@ -39,10 +39,15 @@ async def discover(hass):
         service_info.device for service_info in service_infos if service_info.name == 'BEDJET_V3'
     ]
 
+    if not bedjets:
+        _LOGGER.warning("No BedJet devices were discovered.")
+        return []
+    
     _LOGGER.info(
-        f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.')
+        f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.'
+    )
 
-    bedjets = [BedjetDeviceEntity(device, idx) for idx, device in enumerate(bedjet_devices)]
+    bedjets = [BedjetDeviceEntity(device, (idx + 1)) for idx, device in enumerate(bedjet_devices)]
 
     return bedjets
 
@@ -50,14 +55,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     mac = config_entry.data.get(CONF_MAC)
     bedjets = await discover(hass)
 
-    # Filter devices based on MAC address, if applicable
-    if mac is not None:
-        bedjets = [bj for bj in bedjets if bj.mac == mac]
-
     # Check if the list of discovered devices is empty
     if not bedjets:
         _LOGGER.warning("No BedJet devices were discovered.")
         return
+
+    # Filter devices based on MAC address, if applicable
+    if mac is not None:
+        bedjets = [bj for bj in bedjets if bj.mac == mac]
 
     # Create BedjetDevice instance
     bedjet_device = BedjetDevice(bedjets)

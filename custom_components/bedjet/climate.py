@@ -32,7 +32,7 @@ from bleak.backends.device import BLEDevice
 _LOGGER = logging.getLogger(__name__)
 
 async def discover(hass):
-    service_infos = await bluetooth.async_discovered_service_info(
+    service_infos = bluetooth.async_discovered_service_info(
         hass, connectable=True)
 
     bedjet_devices = [

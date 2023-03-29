@@ -42,7 +42,7 @@ async def discover(hass):
     _LOGGER.info(
         f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.')
 
-    bedjets = [BedjetDeviceEntity(device) for device in bedjet_devices]
+    bedjets = [BedjetDeviceEntity(device, idx) for idx, device in enumerate(bedjet_devices)]
 
     return bedjets
 

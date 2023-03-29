@@ -39,7 +39,7 @@ async def discover(hass):
         service_info.device for service_info in service_infos if service_info.name == 'BEDJET_V3'
     ]
 
-    if not bedjets:
+    if not bedjet_devices:
         _LOGGER.warning("No BedJet devices were discovered.")
         return []
     

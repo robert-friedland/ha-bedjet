@@ -4,6 +4,7 @@ import logging
 import asyncio
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.const import CONF_MAC, TEMP_FAHRENHEIT
+from homeassistant.components import bluetooth
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.entity import DeviceInfo
 
@@ -25,12 +26,25 @@ from . import DOMAIN
 from .const import (BEDJET_COMMAND_UUID, BEDJET_COMMANDS,
                     BEDJET_SUBSCRIPTION_UUID)
 
-from .discover import discover
-
 from bleak import BleakClient, BleakError
 from bleak.backends.device import BLEDevice
 
 _LOGGER = logging.getLogger(__name__)
+
+async def discover(hass):
+    service_infos = await bluetooth.async_discovered_service_info(
+        hass, connectable=True)
+
+    bedjet_devices = [
+        service_info.device for service_info in service_infos if service_info.name == 'BEDJET_V3'
+    ]
+
+    _LOGGER.info(
+        f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.')
+
+    bedjets = [BedjetDeviceEntity(device) for device in bedjet_devices]
+
+    return bedjets
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     mac = config_entry.data.get(CONF_MAC)

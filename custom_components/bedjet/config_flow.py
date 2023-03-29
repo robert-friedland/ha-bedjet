@@ -23,7 +23,13 @@ class BedjetDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="My Bedjet", data=user_input)
 
-        return self.async_show_form(step_id="user", data_schema=DEVICE_SCHEMA)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=DEVICE_SCHEMA,
+            description_placeholders={
+                "mac_helper_text": "Enter the MAC address of your BedJet device (optional)."
+            },
+        )
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
@@ -33,4 +39,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="Update Bedjet Mac", data=user_input)
 
-        return self.async_show_form(step_id="init", data_schema=DEVICE_SCHEMA)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=DEVICE_SCHEMA,
+            description_placeholders={
+                "mac_helper_text": "Enter the MAC address of your BedJet device (optional)."
+            },
+        )

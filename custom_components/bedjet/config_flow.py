@@ -21,7 +21,7 @@ class BedjetDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
-            return self.async_create_entry(title="My Bedjet", data=user_input, data_description="Mac?")
+            return self.async_create_entry(title="My Bedjet", data=user_input, description_placeholders="Mac?")
 
         return self.async_show_form(
             step_id="user",
@@ -37,7 +37,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
-            return self.async_create_entry(title="Update Bedjet Mac", data=user_input, data_description="Mac?")
+            return self.async_create_entry(title="Update Bedjet Mac", data=user_input, description_placeholders="Mac?")
 
         return self.async_show_form(
             step_id="init",

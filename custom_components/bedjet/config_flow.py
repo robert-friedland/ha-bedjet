@@ -7,7 +7,14 @@ from . import DOMAIN
 
 DEVICE_SCHEMA = vol.Schema(
     {
-        vol.Optional(CONF_MAC): str,
+        # The CONF_MAC field is optional, meaning the user may or may not provide it.
+        # If provided, it should be a string that matches the format of a MAC address.
+        vol.Optional(CONF_MAC, description={"suggested_value": "AA:BB:CC:DD:EE:FF"}): vol.All(
+            # The input value should be a string.
+            vol.Coerce(str),
+            # Use a regular expression to validate the format of the MAC address.
+            vol.Match(r"^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$")
+        ),
     }
 )
 

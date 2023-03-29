@@ -47,7 +47,7 @@ async def discover(hass):
         f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.'
     )
 
-    bedjets = [BedjetDeviceEntity(device, (idx + 1)) for idx, device in enumerate(bedjet_devices)]
+    bedjets = [BedjetDeviceEntity(device) for idx, device in enumerate(bedjet_devices)]
 
     return bedjets
 
@@ -138,10 +138,9 @@ class PresetMode(Enum):
         return BEDJET_COMMANDS.get(self.value)
 
 class BedjetDeviceEntity(ClimateEntity):
-    def __init__(self, device: BLEDevice, index):
+    def __init__(self, device: BLEDevice):
         self._client: BleakClient = BleakClient(
             device, disconnected_callback=self.on_disconnect)
-        self.index = index
         self._mac: str = device.address
         self._current_temperature: int | None = None
         self._target_temperature: int | None = None
@@ -206,11 +205,11 @@ class BedjetDeviceEntity(ClimateEntity):
 
     @property
     def name(self) -> str:
-        return f'bedjet_{format_mac(self.mac)}_{self.index}'
+        return f'bedjet_{format_mac(self.mac)}'
 
     @property
     def unique_id(self):
-        return f"{format_mac(self.mac)}_{self.index}"
+        return f"{format_mac(self.mac)}"
 
     @property
     def temperature_unit(self) -> str:

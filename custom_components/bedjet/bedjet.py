@@ -1,3 +1,12 @@
+from enum import Enum
+from datetime import datetime
+import logging
+import asyncio
+from homeassistant.components.climate import ClimateEntity
+from homeassistant.const import CONF_MAC, TEMP_FAHRENHEIT
+from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.entity import DeviceInfo
+
 from homeassistant.const import (
     TEMP_FAHRENHEIT,
     ATTR_TEMPERATURE
@@ -11,80 +20,62 @@ from homeassistant.components.climate.const import (
     HVAC_MODE_COOL,
     HVAC_MODE_DRY
 )
-from datetime import datetime
-import logging
-from homeassistant.components import bluetooth
-import asyncio
-import voluptuous as vol
-from bleak import BleakClient, BleakError
-from bleak.backends.device import BLEDevice
 
-from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
-from homeassistant.const import (CONF_NAME, CONF_MAC)
-import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.device_registry import format_mac
-from homeassistant.helpers.entity import DeviceInfo
-
-from enum import Enum
-
+from . import DOMAIN
 from .const import (BEDJET_COMMAND_UUID, BEDJET_COMMANDS,
                     BEDJET_SUBSCRIPTION_UUID)
 
+from .discover import discover
+
+from bleak import BleakClient, BleakError
+from bleak.backends.device import BLEDevice
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = 'bedjet'
-
-try:
-    from homeassistant.components.climate import (
-        ClimateEntity,
-        PLATFORM_SCHEMA,
-    )
-except ImportError:
-    from homeassistant.components.climate import (
-        ClimateDevice as ClimateEntity,
-        PLATFORM_SCHEMA,
-    )
 
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Optional(CONF_NAME, default=''): cv.string,
-    vol.Optional(CONF_MAC, default=''): cv.string,
-})
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    mac = config_entry.data.get(CONF_MAC)
+    bedjets = await discover(hass)
 
+    if mac is not None:
+        bedjets = [bj for bj in bedjets if bj.mac == mac]
 
-async def async_setup_platform(hass, config, add_entities, discovery_info=None):
-    mac = config.get(CONF_MAC).upper()
+    entities = []
+    for bj in bedjets:
+        my_device = BedjetDevice(bj)
+        entities.extend([BedjetDeviceEntity(my_device, idx) for idx in range(my_device.number_of_entities)])
 
-    if config.get(CONF_NAME) != '':
-        _LOGGER.warn(
-            f'{CONF_NAME} is a deprecated option and will be ignored.')
+    async_add_entities(entities, True)
 
-    if not mac or mac == '':
-        _LOGGER.info('Setting up all discoverable BedJets.')
-        service_infos = bluetooth.async_discovered_service_info(
-            hass, connectable=True)
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    mac = config_entry.data.get(CONF_MAC)
+    bedjets = await discover(hass)
 
-        bedjet_devices = [
-            service_info.device for service_info in service_infos if service_info.name == 'BEDJET_V3']
+    # Filter devices based on MAC address, if applicable
+    if mac is not None:
+        bedjets = [bj for bj in bedjets if bj.mac == mac]
 
-        _LOGGER.info(
-            f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.')
+    # Check if the list of discovered devices is empty
+    if not bedjets:
+        _LOGGER.warning("No BedJet devices were discovered.")
+        return
 
-        bedjets = [BedJet(device) for device in bedjet_devices]
+    # Create BedjetDevice instance
+    bedjet_device = BedjetDevice(bedjets)
 
-    else:
-        _LOGGER.info(f'Setting up BedJet with mac address {mac}.')
-        device = bluetooth.async_ble_device_from_address(
-            hass, mac, connectable=True)
-        bedjets = [BedJet(device)]
+    # Add entities to Home Assistant
+    async_add_entities(bedjet_device.entities, True)
 
-    for bedjet in bedjets:
-        asyncio.create_task(bedjet.connect_and_subscribe())
+class BedjetDevice:
+    def __init__(self, bedjets):
+        self.bedjets = bedjets
+        self.entities = [BedjetDeviceEntity(bj) for bj in self.bedjets]
 
-    add_entities(bedjets)
-
-
+    async def update(self):
+        for entity in self.entities:
+            await entity.update_data()
+    
 class FanMode(Enum):
     FAN_MIN = 10
     FAN_LOW = 25
@@ -140,12 +131,12 @@ class PresetMode(Enum):
     def command(self):
         return BEDJET_COMMANDS.get(self.value)
 
-
-class BedJet(ClimateEntity):
-    def __init__(self, device: BLEDevice):
-        self._mac: str = device.address
+class BedjetDeviceEntity(ClimateEntity):
+    def __init__(self, device: BLEDevice, index):
         self._client: BleakClient = BleakClient(
             device, disconnected_callback=self.on_disconnect)
+        self.index = index
+        self._mac: str = device.address
         self._current_temperature: int | None = None
         self._target_temperature: int | None = None
         self._hvac_mode: HVACMode | None = None
@@ -209,11 +200,11 @@ class BedJet(ClimateEntity):
 
     @property
     def name(self) -> str:
-        return f'bedjet_{format_mac(self.mac)}'
+        return f'bedjet_{format_mac(self.mac)}_{self.index}'
 
     @property
-    def unique_id(self) -> str:
-        return f'climate_{self.name}'
+    def unique_id(self):
+        return f"{format_mac(self.mac)}_{self.index}"
 
     @property
     def temperature_unit(self) -> str:
@@ -449,3 +440,7 @@ class BedJet(ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str):
         await self.set_mode(PresetMode(preset_mode).command())
+    
+    async def update_data(self):
+        if not self.is_connected:
+            await self.connect_and_subscribe()

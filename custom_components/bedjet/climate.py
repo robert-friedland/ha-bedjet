@@ -67,6 +67,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # Create BedjetDevice instance
     bedjet_device = BedjetDevice(bedjets)
 
+    for bedjet in bedjet_device.entities:
+        asyncio.create_task(bedjet.connect_and_subscribe())
+
     # Add entities to Home Assistant
     async_add_entities(bedjet_device.entities, True)
 

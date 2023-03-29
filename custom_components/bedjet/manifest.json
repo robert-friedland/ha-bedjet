@@ -4,6 +4,6 @@
     "documentation": "https://github.com/asheliahut/ha-bedjet",
     "dependencies": [],
     "codeowners": ["@asheliahut"],
-    "version": "0.2.5",
+    "version": "0.2.6",
     "config_flow": true
 }

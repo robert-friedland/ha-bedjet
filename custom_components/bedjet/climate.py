@@ -67,8 +67,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
 class BedjetDevice:
     def __init__(self, bedjets):
-        self.bedjets = bedjets
-        self.entities = [BedjetDeviceEntity(bj) for bj in self.bedjets]
+        self.entities = bedjets
+        self.number_of_entities = len(bedjets) if bedjets else 0
 
     async def update(self):
         for entity in self.entities:

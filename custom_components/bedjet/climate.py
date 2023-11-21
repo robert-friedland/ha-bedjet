@@ -290,7 +290,7 @@ class BedjetDeviceEntity(ClimateEntity):
         self._last_seen = value
 
     async def connect(self, max_retries=10):
-        reconnect_interval = 3
+        reconnect_interval = 10
         for i in range(0, max_retries):
             try:
                 _LOGGER.info(f'Attempting to connect to {self.mac}.')

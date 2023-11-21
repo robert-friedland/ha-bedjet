@@ -1,9 +1,9 @@
 {
     "domain": "bedjet",
-    "name": "Home Assistant BedJet Ashelia v2",
+    "name": "BedJet",
     "documentation": "https://github.com/asheliahut/ha-bedjet",
     "dependencies": [],
     "codeowners": ["@asheliahut"],
-    "version": "0.2.2",
+    "version": "0.2.3",
     "config_flow": true
 }

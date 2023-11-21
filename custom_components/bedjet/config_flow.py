@@ -23,7 +23,7 @@ class BedjetDeviceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="My Bedjet", data=user_input)
+            return self.async_create_entry(title="BedJet", data=user_input)
 
         return self.async_show_form(
             step_id="user",

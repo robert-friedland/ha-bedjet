@@ -83,11 +83,11 @@ class BedjetDevice:
             await entity.update_data()
     
 class FanMode(Enum):
-    FAN_MIN = 10
-    FAN_LOW = 25
-    FAN_MEDIUM = 50
-    FAN_HIGH = 75
-    FAN_MAX = 100
+    min = 10
+    low = 25
+    medium = 50
+    high = 75
+    max = 100
 
     @staticmethod
     def get_fan_mode(fan_pct: int | None):
@@ -290,7 +290,7 @@ class BedjetDeviceEntity(ClimateEntity):
         self._last_seen = value
 
     async def connect(self, max_retries=10):
-        reconnect_interval = 3
+        reconnect_interval = 10
         for i in range(0, max_retries):
             try:
                 _LOGGER.info(f'Attempting to connect to {self.mac}.')
@@ -358,7 +358,7 @@ class BedjetDeviceEntity(ClimateEntity):
             if value[14] == 0x50 and value[13] == 0x2d:
                 return PresetMode.heat
             if value[14] == 0x3e:
-                return PresetMode.heat
+                return PresetMode.dry
             if value[14] == 0x43:
                 return PresetMode.ext_ht
             if value[14] == 0x20:

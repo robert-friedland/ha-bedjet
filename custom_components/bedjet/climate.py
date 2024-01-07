@@ -3,23 +3,17 @@ from datetime import datetime
 import logging
 import asyncio
 from homeassistant.components.climate import ClimateEntity
-from homeassistant.const import CONF_MAC, TEMP_FAHRENHEIT
+from homeassistant.const import CONF_MAC, UnitOfTemperature
 from homeassistant.components import bluetooth
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.entity import DeviceInfo
 
 from homeassistant.const import (
-    TEMP_FAHRENHEIT,
     ATTR_TEMPERATURE
 )
 from homeassistant.components.climate.const import (
-    SUPPORT_TARGET_TEMPERATURE,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_FAN_MODE,
-    HVAC_MODE_OFF,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_COOL,
-    HVAC_MODE_DRY
+    ClimateEntityFeature,
+    HVACMode as OriginalHVACMode
 )
 
 from . import DOMAIN
@@ -102,10 +96,10 @@ class FanMode(Enum):
 
 
 class HVACMode(Enum):
-    off = HVAC_MODE_OFF
-    cool = HVAC_MODE_COOL
-    heat = HVAC_MODE_HEAT
-    dry = HVAC_MODE_DRY
+    off = OriginalHVACMode.OFF
+    cool = OriginalHVACMode.COOL
+    heat = OriginalHVACMode.HEAT
+    dry = OriginalHVACMode.DRY
 
     def command(self):
         return BEDJET_COMMANDS.get(self.value)
@@ -213,7 +207,7 @@ class BedjetDeviceEntity(ClimateEntity):
 
     @property
     def temperature_unit(self) -> str:
-        return TEMP_FAHRENHEIT
+        return UnitOfTemperature.FAHRENHEIT
 
     @property
     def hvac_modes(self) -> list[str]:
@@ -221,7 +215,7 @@ class BedjetDeviceEntity(ClimateEntity):
 
     @property
     def supported_features(self):
-        return SUPPORT_TARGET_TEMPERATURE | SUPPORT_PRESET_MODE | SUPPORT_FAN_MODE
+        return ClimateEntityFeature.TARGET_TEMPERATURE  | ClimateEntityFeature.PRESET_MODE | ClimateEntityFeature.FAN_MODE
 
     @property
     def preset_modes(self) -> list[str]:

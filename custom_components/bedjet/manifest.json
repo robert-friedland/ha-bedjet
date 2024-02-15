@@ -1,0 +1,9 @@
+{
+    "domain": "bedjet",
+    "name": "BedJet",
+    "documentation": "https://github.com/asheliahut/ha-bedjet",
+    "dependencies": [],
+    "codeowners": ["@asheliahut"],
+    "version": "0.2.4",
+    "config_flow": true
+}

@@ -1,8 +1,0 @@
-{
-    "domain": "ha_bedjet",
-    "name": "Home Assistant BedJet",
-    "documentation": "https://github.com/robert-friedland/ha-bedjet",
-    "dependencies": [],
-    "codeowners": ["@robert-friedland"],
-    "version": "0.1.0"
-}
